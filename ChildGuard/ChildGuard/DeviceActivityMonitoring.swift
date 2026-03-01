@@ -7,6 +7,7 @@
 
 import DeviceActivity
 import FamilyControls
+import Foundation
 
 extension DeviceActivityName {
     static let dailyLimit = DeviceActivityName("dailyLimit")

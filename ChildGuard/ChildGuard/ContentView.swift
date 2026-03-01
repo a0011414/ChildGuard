@@ -235,8 +235,11 @@ struct ChildModeView: View {
 
     private func requestAuthorization() {
         isRequestingAuth = true
-        AuthorizationCenter.shared.requestAuthorization { result in
-            DispatchQueue.main.async {
+        Task {
+            do {
+                try await AuthorizationCenter.shared.requestAuthorization(for: .child)
+            } catch { /* ユーザーが拒否した場合など */ }
+            await MainActor.run {
                 isRequestingAuth = false
                 authStatus = AuthorizationCenter.shared.authorizationStatus
             }

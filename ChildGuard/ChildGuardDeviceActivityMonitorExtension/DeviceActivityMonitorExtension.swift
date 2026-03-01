@@ -6,6 +6,7 @@
 //
 
 import DeviceActivity
+import Foundation
 import ManagedSettings
 import FamilyControls
 
