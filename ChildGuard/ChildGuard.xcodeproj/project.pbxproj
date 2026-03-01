@@ -249,6 +249,7 @@
 				CODE_SIGN_ENTITLEMENTS = ChildGuardDeviceActivityMonitorExtension/ChildGuardDeviceActivityMonitorExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F5558YDHK6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChildGuardDeviceActivityMonitorExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ChildGuardDeviceActivityMonitorExtension;
@@ -277,6 +278,7 @@
 				CODE_SIGN_ENTITLEMENTS = ChildGuardDeviceActivityMonitorExtension/ChildGuardDeviceActivityMonitorExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F5558YDHK6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChildGuardDeviceActivityMonitorExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ChildGuardDeviceActivityMonitorExtension;
@@ -428,6 +430,7 @@
 				CODE_SIGN_ENTITLEMENTS = ChildGuard/ChildGuard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F5558YDHK6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -460,6 +463,7 @@
 				CODE_SIGN_ENTITLEMENTS = ChildGuard/ChildGuard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F5558YDHK6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
