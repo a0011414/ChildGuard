@@ -52,3 +52,5 @@ Xcode で **Extension ターゲット** を追加し、このフォルダをそ�
 ---
 
 問題があれば、Extension の Bundle ID や App Group がメインアプリと一致しているか、Family Controls の Capability が両方のターゲットで有効かを確認してください。
+
+**重要**: Extension の `ChildGuardDeviceActivityMonitorExtension.entitlements` の **App Groups の配列が空でないこと**。`group.com.yoshi.ChildGuard` が含まれていないと、Extension から本体が保存した選択を読めず「シールドをかけられませんでした」になる。

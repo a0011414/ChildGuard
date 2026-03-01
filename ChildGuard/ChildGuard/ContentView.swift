@@ -8,6 +8,7 @@
 import SwiftUI
 import FamilyControls
 import ManagedSettings
+import UserNotifications
 
 enum AppMode: String, CaseIterable {
     case parent = "親"
@@ -169,6 +170,8 @@ struct ChildModeView: View {
     @ObservedObject var store: RuleStore
     @State private var authStatus: AuthorizationStatus = .notDetermined
     @State private var isRequestingAuth = false
+    @State private var authErrorMessage: String?
+    @State private var monitoringMessage: String?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -208,37 +211,77 @@ struct ChildModeView: View {
         .onAppear {
             authStatus = AuthorizationCenter.shared.authorizationStatus
         }
+        .alert("認可エラー", isPresented: Binding(get: { authErrorMessage != nil }, set: { if !$0 { authErrorMessage = nil } })) {
+            Button("OK", role: .cancel) { authErrorMessage = nil }
+        } message: {
+            if let msg = authErrorMessage { Text(msg) }
+        }
     }
 
+    @ViewBuilder
     private var childModeContent: some View {
-        Group {
-            if store.rule.dailyLimitMinutes > 0 {
-                Text("1日の利用時間の上限: \(store.rule.dailyLimitMinutes) 分")
-                    .font(.body)
-                    .padding()
-            } else {
-                Text("いまルールは設定されていません。\n親モードで「1日の上限」を設定してください。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
-            FamilyActivityPickerView()
-            if store.rule.dailyLimitMinutes > 0 {
-                Button("監視を開始") {
-                    DeviceActivityMonitoring.startIfPossible(dailyLimitMinutes: store.rule.dailyLimitMinutes)
+        if store.rule.dailyLimitMinutes > 0 {
+            Text("1日の利用時間の上限: \(store.rule.dailyLimitMinutes) 分")
+                .font(.body)
+                .padding()
+        } else {
+            Text("いまルールは設定されていません。\n親モードで「1日の上限」を設定してください。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding()
+        }
+        FamilyActivityPickerView()
+        if store.rule.dailyLimitMinutes > 0 {
+            Button("監視を開始") {
+                Task {
+                    _ = await requestNotificationPermissionIfNeeded()
+                    await MainActor.run {
+                        monitoringMessage = DeviceActivityMonitoring.startIfPossible(dailyLimitMinutes: store.rule.dailyLimitMinutes)
+if monitoringMessage == nil {
+                    monitoringMessage = "監視を開始しました。このあと、選んだアプリを設定分数だけ使うと制限がかかります（それ以前の利用はカウントされません）。"
                 }
-                .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .buttonStyle(.bordered)
+            if let msg = monitoringMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(isMonitoringSuccessMessage ? Color.secondary : Color.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
         }
     }
 
+    private var isMonitoringSuccessMessage: Bool {
+        monitoringMessage?.hasPrefix("監視を開始しました") == true
+    }
+
+    /// 制限到達時に Extension から通知を出すため、本体で許可を取っておく
+    private func requestNotificationPermissionIfNeeded() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            return (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+        }
+        return settings.authorizationStatus == .authorized
+    }
+
     private func requestAuthorization() {
+        authErrorMessage = nil
         isRequestingAuth = true
         Task {
             do {
-                try await AuthorizationCenter.shared.requestAuthorization(for: .child)
-            } catch { /* ユーザーが拒否した場合など */ }
+                // .individual = この端末で Face ID / Touch ID で許可（テストや単独利用向け）
+                // .child = ファミリー共有の保護者が許可（実際の子の端末向け）
+                try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+            } catch {
+                await MainActor.run {
+                    authErrorMessage = "許可できませんでした: \(error.localizedDescription)"
+                }
+            }
             await MainActor.run {
                 isRequestingAuth = false
                 authStatus = AuthorizationCenter.shared.authorizationStatus
@@ -258,6 +301,9 @@ struct FamilyActivityPickerView: View {
             Text("制限するアプリ・Web")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            Text("監視を開始するには「アプリ」で1つ以上選んでください。")
+                .font(.caption2)
+                .foregroundStyle(Color.secondary)
             FamilyActivityPicker(selection: $selection)
             Button("この選択を保存") {
                 saveSelection()

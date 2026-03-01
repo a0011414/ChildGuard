@@ -8,6 +8,7 @@
 import DeviceActivity
 import FamilyControls
 import Foundation
+import ManagedSettings
 
 extension DeviceActivityName {
     static let dailyLimit = DeviceActivityName("dailyLimit")
@@ -19,13 +20,21 @@ extension DeviceActivityEvent.Name {
 
 enum DeviceActivityMonitoring {
 
-    /// 保存された選択と1日上限（分）で監視を開始する。選択が空や上限が0の場合は何もしない。
-    static func startIfPossible(dailyLimitMinutes: Int) {
-        guard dailyLimitMinutes > 0,
-              let defaults = AppGroup.shared,
-              let data = defaults.data(forKey: AppGroup.familyActivitySelectionKey),
-              let selection = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data),
-              !selection.applicationTokens.isEmpty || !selection.categoryTokens.isEmpty || !selection.webDomainTokens.isEmpty else { return }
+    /// 保存された選択と1日上限（分）で監視を開始する。結果メッセージを返す（nil = 成功）。
+    static func startIfPossible(dailyLimitMinutes: Int) -> String? {
+        guard dailyLimitMinutes > 0 else {
+            return "1日の上限（分）を設定してください。"
+        }
+        guard let defaults = AppGroup.shared else {
+            return "App Group が利用できません。"
+        }
+        guard let data = defaults.data(forKey: AppGroup.familyActivitySelectionKey),
+              let selection = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) else {
+            return "先に「制限するアプリ・Web」を選んで「この選択を保存」をタップしてください。"
+        }
+        guard !selection.applicationTokens.isEmpty else {
+            return "「アプリ」タブで個別のアプリを1つ以上選んでから「この選択を保存」をタップしてください。カテゴリだけでは監視を開始できません。"
+        }
 
         let threshold = DateComponents(minute: dailyLimitMinutes)
         let schedule = DeviceActivitySchedule(
@@ -33,9 +42,6 @@ enum DeviceActivityMonitoring {
             intervalEnd: DateComponents(hour: 23, minute: 59, second: 59),
             repeats: true
         )
-
-        // アプリトークンのみでイベントを定義（しきい値は「そのアプリ群の合計使用時間」）
-        guard !selection.applicationTokens.isEmpty else { return }
         let event = DeviceActivityEvent(
             applications: selection.applicationTokens,
             threshold: threshold
@@ -44,9 +50,14 @@ enum DeviceActivityMonitoring {
         let center = DeviceActivityCenter()
         do {
             try center.startMonitoring(.dailyLimit, during: schedule, events: [.limitReached: event])
+            // 本体で一度 Store を触っておく（Extension 側のシールド適用が効きやすくなる場合がある）
+            let store = ManagedSettingsStore()
+            store.shield.applications = nil
+            store.shield.applicationCategories = nil
+            store.shield.webDomains = nil
+            return nil // 成功
         } catch {
-            // 監視開始に失敗（既に監視中、または権限不足など）
-            print("DeviceActivity startMonitoring failed: \(error)")
+            return "監視の開始に失敗しました: \(error.localizedDescription)"
         }
     }
 
