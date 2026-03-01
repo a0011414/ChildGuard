@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import FamilyControls
+import ManagedSettings
 
 enum AppMode: String, CaseIterable {
     case parent = "親"
@@ -165,6 +167,8 @@ private struct ShareSheet: View {
 
 struct ChildModeView: View {
     @ObservedObject var store: RuleStore
+    @State private var authStatus: AuthorizationStatus = .notDetermined
+    @State private var isRequestingAuth = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -175,6 +179,39 @@ struct ChildModeView: View {
             Text("子モード")
                 .font(.headline)
 
+            switch authStatus {
+            case .notDetermined, .denied:
+                Text("利用時間の制限を使うには、保護者による管理の許可が必要です。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                Button {
+                    requestAuthorization()
+                } label: {
+                    if isRequestingAuth {
+                        ProgressView()
+                    } else {
+                        Text("保護者による管理を許可する")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isRequestingAuth)
+            case .approved:
+                childModeContent
+            @unknown default:
+                childModeContent
+            }
+
+            Spacer()
+        }
+        .onAppear {
+            authStatus = AuthorizationCenter.shared.authorizationStatus
+        }
+    }
+
+    private var childModeContent: some View {
+        Group {
             if store.rule.dailyLimitMinutes > 0 {
                 Text("1日の利用時間の上限: \(store.rule.dailyLimitMinutes) 分")
                     .font(.body)
@@ -186,9 +223,78 @@ struct ChildModeView: View {
                     .multilineTextAlignment(.center)
                     .padding()
             }
-
-            Spacer()
+            FamilyActivityPickerView()
+            if store.rule.dailyLimitMinutes > 0 {
+                Button("監視を開始") {
+                    DeviceActivityMonitoring.startIfPossible(dailyLimitMinutes: store.rule.dailyLimitMinutes)
+                }
+                .buttonStyle(.bordered)
+            }
         }
+    }
+
+    private func requestAuthorization() {
+        isRequestingAuth = true
+        AuthorizationCenter.shared.requestAuthorization { result in
+            DispatchQueue.main.async {
+                isRequestingAuth = false
+                authStatus = AuthorizationCenter.shared.authorizationStatus
+            }
+        }
+    }
+}
+
+// MARK: - 制限するアプリの選択（App Group に保存）
+
+struct FamilyActivityPickerView: View {
+    @State private var selection = FamilyActivitySelection()
+    @State private var savedMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("制限するアプリ・Web")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            FamilyActivityPicker(selection: $selection)
+            Button("この選択を保存") {
+                saveSelection()
+            }
+            .buttonStyle(.bordered)
+            if let msg = savedMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .onAppear {
+            loadSelection()
+        }
+        .onChange(of: selection) { _, _ in
+            savedMessage = nil
+        }
+    }
+
+    private func saveSelection() {
+        guard let defaults = AppGroup.shared else {
+            savedMessage = "App Group が利用できません"
+            return
+        }
+        do {
+            let data = try PropertyListEncoder().encode(selection)
+            defaults.set(data, forKey: AppGroup.familyActivitySelectionKey)
+            defaults.synchronize()
+            savedMessage = "保存しました（制限時にこの選択が使われます）"
+        } catch {
+            savedMessage = "保存に失敗: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadSelection() {
+        guard let defaults = AppGroup.shared,
+              let data = defaults.data(forKey: AppGroup.familyActivitySelectionKey),
+              let decoded = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data) else { return }
+        selection = decoded
     }
 }
 
