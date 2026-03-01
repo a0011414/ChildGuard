@@ -111,6 +111,8 @@
 
 | 現象 | 対処 |
 |------|------|
+| **Build input file cannot be found: ... .mobileprovision** | 古いプロビジョニングプロファイルを参照している。**対処**: (1) Xcode を終了する。(2) Finder で **移動 → フォルダへ移動** に `~/Library/Developer/Xcode/UserData/Provisioning Profiles` と入力して開く。(3) 中身の `.mobileprovision` をゴミ箱に移す（全部でよい）。(4) Xcode を起動し、各ターゲットの **Signing & Capabilities** で **Automatically manage signing** がオンで、**Provisioning Profile** が「自動」になっているか確認する。(5) **Product → Clean Build Folder** のあと、再度ビルドする。 |
+| **Your team has no devices** | iPhone を USB で接続し、実行先をその iPhone にして一度 Run（⌘R）する。デバイスがチームに登録されたら、実行先を **Any iOS Device** に戻して Archive。 |
 | Archive がグレー | 実行先を **Any iOS Device** にする |
 | アップロード後「処理中」のまま | 最大 30 分ほど待つ。それ以上なら App Store Connect の「ビルド」一覧でエラーがないか確認 |
 | TestFlight にビルドが出ない | 同じバージョン・ビルド番号が App Store Connect の「ビルド」に表示されているか確認。表示されていれば TestFlight タブで選べる |
