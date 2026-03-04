@@ -24,6 +24,12 @@ Thumbs.db
 # Firebase / Google（API キーを含むためリポジトリに含めない）
 **/GoogleService-Info.plist
 
+# 秘密鍵（絶対にコミットしない）
+*.p8
+*.key
+**/AppleDistribution.key
+**/AuthKey_*.p8
+
 # Build / 配布
 *.ipa
 *.dSYM.zip
