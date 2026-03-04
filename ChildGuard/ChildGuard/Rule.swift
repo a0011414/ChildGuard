@@ -206,13 +206,13 @@ final class RuleStore: ObservableObject {
                 recordToShare = CKRecord(recordType: CloudKitConfig.recordType, recordID: recordID)
                 recordToShare[CloudKitConfig.keyMinutes] = self.rule.dailyLimitMinutes
             }
-            // 必ず「レコードを先に1回保存」→「共有だけ別オペで保存」にする（レコードとShareを同時送信するとエラー15になりやすいため）
-            self.saveRecordThenCreateShare(db: db, record: recordToShare, retryCount: retryCount, recordID: recordID, zoneID: zoneID, completion: completion)
+            // レコードを保存してから、ゾーン単位の共有（CKShare(recordZoneID:)）を作成する
+            self.saveRecordThenCreateZoneShare(db: db, record: recordToShare, retryCount: retryCount, recordID: recordID, zoneID: zoneID, completion: completion)
         }
     }
 
-    /// レコードを保存してから、共有だけを別オペレーションで保存する。
-    private func saveRecordThenCreateShare(db: CKDatabase, record: CKRecord, retryCount: Int, recordID: CKRecord.ID, zoneID: CKRecordZone.ID, completion: @escaping (URL?, String?) -> Void) {
+    /// レコードを保存してから、ゾーン単位の共有を作成する（rootRecord 方式でエラー15が続く場合の代替）。
+    private func saveRecordThenCreateZoneShare(db: CKDatabase, record: CKRecord, retryCount: Int, recordID: CKRecord.ID, zoneID: CKRecordZone.ID, completion: @escaping (URL?, String?) -> Void) {
         db.save(record) { [weak self] _, saveError in
             guard let self = self else { return }
             if let saveError = saveError as? CKError, saveError.code.rawValue == 15, retryCount < 1 {
@@ -226,16 +226,16 @@ final class RuleStore: ObservableObject {
                 DispatchQueue.main.async { completion(nil, msg) }
                 return
             }
-            self.createShareOnly(db: db, record: record, completion: completion)
+            self.createZoneShare(db: db, zoneID: zoneID, completion: completion)
         }
     }
 
-    /// レコードと CKShare を 1 回の modify で保存する（公式サンプルでよく使われる形）。
-    private func createShareOnly(db: CKDatabase, record: CKRecord, completion: @escaping (URL?, String?) -> Void) {
-        let share = CKShare(rootRecord: record)
+    /// ゾーン単位の共有（CKShare(recordZoneID:)）を作成する。レコード単位の共有でエラー15になる場合に試す。
+    private func createZoneShare(db: CKDatabase, zoneID: CKRecordZone.ID, completion: @escaping (URL?, String?) -> Void) {
+        let share = CKShare(recordZoneID: zoneID)
         share[CKShare.SystemFieldKey.title] = "ChildGuard のルール"
         share.publicPermission = .none
-        let op = CKModifyRecordsOperation(recordsToSave: [record, share], recordIDsToDelete: nil)
+        let op = CKModifyRecordsOperation(recordsToSave: [share], recordIDsToDelete: nil)
         op.modifyRecordsResultBlock = { result in
             switch result {
             case .success:
