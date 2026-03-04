@@ -39,6 +39,67 @@
    - Apple のバンドル ID: `com.yoshi.ChildGuard`（実際の Bundle ID に合わせる）
    - **GoogleService-Info.plist** をダウンロードし、Xcode の ChildGuard ターゲットの **ChildGuard** グループにドラッグで追加（Copy items if needed にチェック）。
 
+**注意**: **GoogleService-Info.plist は .gitignore に含まれており、Git にコミットしません。** API キーが GitHub などに公開されると Google から警告が届きます。リポジトリをクローンした人は、Firebase Console から自分用の plist をダウンロードして追加してください。
+
+---
+
+## 1.1. 「API キーが一般公開されています」と Google から届いた場合
+
+GitHub などに **GoogleService-Info.plist** が含まれたままプッシュすると、Google が検知してメールで通知します。次の手順で対処してください。
+
+1. **Google Cloud Console** でキーを無効化・再発行する  
+   - プロジェクトの見つけ方：  
+     - **[Firebase Console](https://console.firebase.google.com/)** にログイン → 一覧で **ChildGuard**（または作成したときの名前）をクリック。  
+     - 左の **⚙ プロジェクトの設定** → **全般** の下の「プロジェクト ID」に **childguard-72f89** と出ていれば、その Firebase プロジェクトが GCP と連携しています。  
+     - 同じページの **「Google Cloud で開く」**（または「プロジェクトを Google Cloud で管理」）をクリックすると、そのプロジェクトが開いた状態で GCP に移れます。  
+     - または [Google Cloud Console](https://console.cloud.google.com/) に直接行く場合：画面上部の **プロジェクト名の横の▼** をクリック → 一覧に **ChildGuard** や **childguard-72f89** が出ていればそれを選択。出ない場合は、Firebase にログインしている **同じ Google アカウント** で GCP にログインしているか確認してください。  
+   - プロジェクトを開いたら **API とサービス** → **認証情報** を開く。  
+   - メールに記載の **API キー**（例: 末尾が …K57lK8I）をクリック。  
+   - **キーを再生成** をクリックして新しいキーに取り替える（古いキーはすぐ無効になります）。
+
+2. **Firebase から新しい GoogleService-Info.plist を取得する**  
+   - [Firebase Console](https://console.firebase.google.com/) → プロジェクト **childguard-72f89** → **プロジェクトの設定**（歯車）→ **全般** → **マイアプリ**。  
+   - 該当 iOS アプリの **GoogleService-Info.plist** を**再度ダウンロード**する（再生成後は新しいキーが含まれる場合があります。含まれない場合は、GCP の認証情報で該当キーの値をコピーし、plist 内の該当フィールドを手で書き換える必要がある場合があります）。  
+   - ダウンロードした plist で、Xcode の **ChildGuard/ChildGuard/** にある既存の **GoogleService-Info.plist** を**上書き**する。
+
+3. **今後 plist を Git に含めない**  
+   - このリポジトリでは **GoogleService-Info.plist** を `.gitignore` に追加済みです。  
+   - すでに Git で追跡している場合は、リポジトリからだけ外す（ファイルは手元に残す）ために次を実行してください。  
+     ```bash
+     git rm --cached ChildGuard/ChildGuard/GoogleService-Info.plist
+     git commit -m "Stop tracking GoogleService-Info.plist (API key security)"
+     ```  
+   - その後は **この plist をコミット・プッシュしない**でください。別のマシンやクローンでは、Firebase Console から plist をダウンロードして追加します。
+
+4. **（任意）API キーに制限をかける**  
+   - GCP の **認証情報** で該当 API キーを編集し、**アプリの制限** で「iOS アプリ」を選び、Bundle ID に `com.yoshi.ChildGuard` を指定すると、このキーはそのアプリ以外では使えなくなります。
+
+---
+
+## 1.2. GitHub から「Secrets detected」「Action needed」と届いた場合
+
+GitHub のシークレットスキャンで **Google API Key** などが検出され、メールで「Action needed: Secrets detected」と届くことがあります。**1.1 の手順に加えて**次を行ってください。
+
+1. **リポジトリから plist の追跡を外し、プッシュする**（まだなら）  
+   ```bash
+   cd /Users/a0011414/CloudStation/VariousPrograms/ChildGuard   # リポジトリのルート
+   git rm --cached ChildGuard/ChildGuard/GoogleService-Info.plist
+   git commit -m "Stop tracking GoogleService-Info.plist (API key security)"
+   git push
+   ```  
+   これで **最新のコミット** には GoogleService-Info.plist が含まれなくなります。
+
+2. **Google 側でキーを再生成する**（1.1 の手順 1）  
+   漏れたキーは **無効化・再発行** しないと、Git の過去履歴に残ったまま誰でも参照できます。必ず GCP の **認証情報** で **キーを再生成** してください。
+
+3. **GitHub のアラートを「解消」する**  
+   - GitHub の **a0011414/ChildGuard** リポジトリを開く。  
+   - **Security** タブ → **Secret scanning**（または **Code security and analysis**）の **Alerts** を開く。  
+   - 該当の「Google API Key」アラートを開き、**Resolve** や **Mark as resolved** を選ぶ。  
+   - 「Revoke secret and resolve」など、**キーを無効化したうえで解消**するオプションがあれば、キー再生成後にそれを選ぶとよいです。
+
+**注意**: `git rm --cached` と push をしても、**過去のコミット履歴には plist の内容が残ります**。そのため、**キーの再生成（無効化）は必ず行ってください**。履歴からも消したい場合は、`git filter-repo` などの履歴書き換えが必要になります（上級者向け）。
+
 ---
 
 ## 2. Cloud Messaging（FCM）の有効化

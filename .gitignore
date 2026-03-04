@@ -21,6 +21,9 @@ xcuserdata/
 .LSOverride
 Thumbs.db
 
+# Firebase / Google（API キーを含むためリポジトリに含めない）
+**/GoogleService-Info.plist
+
 # Build / 配布
 *.ipa
 *.dSYM.zip

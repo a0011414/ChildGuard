@@ -163,6 +163,20 @@ struct ParentModeView: View {
 
         if store.rule.dailyLimitMinutes > 0 {
             Group {
+                Text("ルールを子に渡す")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button {
+                    showRuleQRSheet = true
+                } label: {
+                    Label("ルールをQRで表示", systemImage: "qrcode")
+                }
+                .buttonStyle(.borderedProminent)
+                Text("子の端末でこのQRを読み取ると、ルールが反映されます。確実に渡せます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
                 Button {
                     shareErrorMessage = nil
                     isPreparingShare = true
@@ -171,7 +185,7 @@ struct ParentModeView: View {
                         if let url = url {
                             shareItem = IdentifiableURL(url: url)
                         } else {
-                            shareErrorMessage = errorMessage ?? "共有リンクを用意できませんでした。iCloud にサインインしているか、しばらく待ってから再度お試しください。"
+                            shareErrorMessage = errorMessage.map { _ in "共有リンクを用意できませんでした。上の「ルールをQRで表示」を使って子に渡してください。" } ?? "上の「ルールをQRで表示」を使って子に渡してください。"
                             showRuleQRSheet = true
                         }
                     }
@@ -179,7 +193,7 @@ struct ParentModeView: View {
                     if isPreparingShare {
                         ProgressView()
                     } else {
-                        Label("子どもと共有", systemImage: "square.and.arrow.up")
+                        Label("子どもと共有（CloudKit リンク）", systemImage: "square.and.arrow.up")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -190,11 +204,6 @@ struct ParentModeView: View {
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                 }
-                Button("ルールをQRで表示（CloudKitが使えないとき）") {
-                    showRuleQRSheet = true
-                }
-                .font(.caption)
-                .buttonStyle(.bordered)
             }
             .sheet(isPresented: $showRuleQRSheet) {
                 RuleQRSheet(minutes: store.rule.dailyLimitMinutes)
@@ -206,7 +215,7 @@ struct ParentModeView: View {
 
         Text("親への通知（FCM）")
             .font(.headline)
-        Text("上の「子どもと共有」のQRはルール用。ここは制限がかかったときの通知先の識別用です。この端末を「親」として登録すると、子の制限到達時にプッシュが届きます。家族コードを子の端末で入力するかQRで読み取らせてください。")
+        Text("上の「ルールをQRで表示」がルール用。ここは制限がかかったときの通知先の識別用です。この端末を「親」として登録すると、子の制限到達時にプッシュが届きます。家族コードを子の端末で入力するかQRで読み取らせてください。")
             .font(.caption)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)

@@ -136,8 +136,9 @@ final class RuleStore: ObservableObject {
         let op = CKQueryOperation(query: query)
         op.qualityOfService = .userInitiated
         var didFindShared = false
-        op.recordFetchedBlock = { [weak self] record in
-            guard let self = self,
+        op.recordMatchedBlock = { [weak self] _ /* recordID */, result in
+            guard case .success(let record) = result,
+                  let self = self,
                   let minutes = record[CloudKitConfig.keyMinutes] as? Int else { return }
             didFindShared = true
             DispatchQueue.main.async {
@@ -145,7 +146,7 @@ final class RuleStore: ObservableObject {
                 self.saveToUserDefaults()
             }
         }
-        op.queryCompletionBlock = { _, error in
+        op.queryResultBlock = { _ in
             DispatchQueue.main.async {
                 completion(didFindShared)
             }
