@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import CloudKit
 
 @main
 struct ChildGuardApp: App {
@@ -24,10 +23,7 @@ struct ChildGuardApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "childguard" else {
-            handleCloudKitShareURL(url)
-            return
-        }
+        guard url.scheme == "childguard" else { return }
         // childguard://rule?minutes=60 の形式（QR で渡したルール）
         if url.host == "rule",
            let comp = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -35,19 +31,6 @@ struct ChildGuardApp: App {
            minutes > 0 {
             DispatchQueue.main.async {
                 ruleStore.applyRuleFromQR(dailyLimitMinutes: minutes)
-            }
-            return
-        }
-        handleCloudKitShareURL(url)
-    }
-
-    private func handleCloudKitShareURL(_ url: URL) {
-        let store = ruleStore
-        let container = CKContainer(identifier: "iCloud.com.yoshi.ChildGuard")
-        container.fetchShareMetadata(with: url) { metadata, error in
-            guard let metadata = metadata else { return }
-            DispatchQueue.main.async {
-                store.acceptShare(metadata: metadata) { _ in }
             }
         }
     }

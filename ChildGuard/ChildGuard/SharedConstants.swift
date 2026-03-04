@@ -19,15 +19,9 @@ enum AppGroup {
     /// FamilyActivitySelection を保存する UserDefaults のキー
     static let familyActivitySelectionKey = "familyActivitySelection"
 
-    /// 親への通知用 Cloud Functions のベース URL（末尾スラッシュなし）。未設定なら Extension は親通知を送らない。
-    static let parentNotifyBaseURLKey = "parentNotifyBaseURL"
-
-    /// デフォルトの FCM 用 Cloud Functions ベース URL（全員同じ。詳細で上書き可能）
-    static let defaultFCMBaseURL = "https://us-central1-childguard-72f89.cloudfunctions.net"
-
-    /// 家族コード（8桁）。親が発行し、子が入力 or QR で保存。Extension が notifyParent に渡す。
-    static let familyIdKey = "familyId"
-
-    /// この端末を「親用」として登録したか（端末ごと。UserDefaults.standard で保存）
+    /// この端末を「親用」として登録したか（端末ごと。UserDefaults.standard で保存。親役割選択時に true にする）
     static let isParentDeviceKey = "ChildGuard.isParentDevice"
+
+    /// 初回選択した役割（"parent" / "child"）。未設定は nil。UserDefaults.standard で保存。設定後は切り替え不可。
+    static let roleKey = "ChildGuard.role"
 }

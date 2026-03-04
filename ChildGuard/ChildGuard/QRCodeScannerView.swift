@@ -114,7 +114,14 @@ struct QRCodeScannerView: View {
     @Binding var scannedURL: String
     /// true のときは URL に限定せず、スキャンした文字列をそのまま渡す（家族コード用）
     var acceptAnyString: Bool = false
+    /// 非 nil のときはこの文言をスキャン画面の説明に表示する
+    var prompt: String? = nil
     @Environment(\.dismiss) private var dismiss
+
+    private var overlayText: String {
+        if let prompt = prompt { return prompt }
+        return acceptAnyString ? "家族コードの QR を読み取ってください" : "Cloud Functions の URL が含まれる QR コードを読み取ってください"
+    }
 
     var body: some View {
         QRCodeScannerRepresentable(acceptAnyString: acceptAnyString, onScan: { urlString in
@@ -123,7 +130,7 @@ struct QRCodeScannerView: View {
         })
         .ignoresSafeArea()
         .overlay(alignment: .top) {
-            Text(acceptAnyString ? "家族コードの QR を読み取ってください" : "Cloud Functions の URL が含まれる QR コードを読み取ってください")
+            Text(overlayText)
                 .font(.caption)
                 .foregroundStyle(.white)
                 .padding(12)

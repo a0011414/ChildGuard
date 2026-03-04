@@ -14,9 +14,6 @@ import UserNotifications
 private enum ExtensionAppGroup {
     static let identifier = "group.com.yoshi.ChildGuard"
     static let familyActivitySelectionKey = "familyActivitySelection"
-    static let parentNotifyBaseURLKey = "parentNotifyBaseURL"
-    static let familyIdKey = "familyId"
-    static let defaultFCMBaseURL = "https://us-central1-childguard-72f89.cloudfunctions.net"
 }
 
 final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
@@ -27,7 +24,6 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         super.eventDidReachThreshold(event, activity: activity)
         notifyForDebug("制限時間を超えました")
         applyShield()
-        notifyParentIfConfigured()
     }
 
     override func intervalDidEnd(for activity: DeviceActivityName) {
@@ -49,27 +45,6 @@ final class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         store.shield.applications = selection.applicationTokens
         store.shield.applicationCategories = selection.categoryTokens.isEmpty ? nil : .specific(selection.categoryTokens, except: Set())
         store.shield.webDomains = selection.webDomainTokens.isEmpty ? nil : selection.webDomainTokens
-    }
-
-    /// 家族コードと URL が登録されていれば、Cloud Functions の notifyParent に familyId を渡して呼ぶ
-    private func notifyParentIfConfigured() {
-        guard let defaults = UserDefaults(suiteName: ExtensionAppGroup.identifier),
-              let familyId = defaults.string(forKey: ExtensionAppGroup.familyIdKey)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              familyId.count == 8,
-              familyId.allSatisfy(\.isNumber)
-        else { return }
-        let baseURL = defaults.string(forKey: ExtensionAppGroup.parentNotifyBaseURLKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? ExtensionAppGroup.defaultFCMBaseURL
-        guard let url = URL(string: baseURL.hasSuffix("/") ? baseURL + "notifyParent" : baseURL + "/notifyParent")
-        else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let body = try? JSONSerialization.data(withJSONObject: ["familyId": familyId]) {
-            request.httpBody = body
-        }
-        let task = URLSession.shared.dataTask(with: request) { _, _, _ in }
-        task.resume()
     }
 
     /// デバッグ用：ローカル通知（Extension が呼ばれたか確認できる）

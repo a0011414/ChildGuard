@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  ChildGuard
 //
-//  親モード / 子モード の切り替え（1本のアプリで対応）
+//  初回のみ親/子を選択。以降は選んだ方の画面のみ表示（切り替え不可）。
 //
 
 import SwiftUI
@@ -18,32 +18,49 @@ enum AppMode: String, CaseIterable {
 
 struct ContentView: View {
     @EnvironmentObject var ruleStore: RuleStore
-    @State private var mode: AppMode = .parent
+    /// 未設定なら初回選択画面、設定済みならその役割の画面のみ表示
+    @State private var savedRole: AppMode?
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                Picker("モード", selection: $mode) {
-                    ForEach(AppMode.allCases, id: \.self) { m in
-                        Text(m.rawValue).tag(m)
+        Group {
+            if let role = savedRole {
+                roleView(role)
+            } else {
+                RoleSelectionView { selected in
+                    UserDefaults.standard.set(selected.rawValue, forKey: AppGroup.roleKey)
+                    if selected == .parent {
+                        UserDefaults.standard.set(true, forKey: AppGroup.isParentDeviceKey)
                     }
+                    savedRole = selected
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-
-                Group {
-                    switch mode {
-                    case .parent:
-                        ParentModeView(store: ruleStore)
-                    case .child:
-                        ChildModeView(store: ruleStore)
-                    }
-                }
-                .id(mode)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                Spacer()
             }
+        }
+        .onAppear {
+            loadRole()
+        }
+    }
+
+    private func loadRole() {
+        guard let raw = UserDefaults.standard.string(forKey: AppGroup.roleKey),
+              let role = AppMode(rawValue: raw) else {
+            savedRole = nil
+            return
+        }
+        savedRole = role
+    }
+
+    @ViewBuilder
+    private func roleView(_ role: AppMode) -> some View {
+        NavigationStack {
+            Group {
+                switch role {
+                case .parent:
+                    ParentModeView(store: ruleStore)
+                case .child:
+                    ChildModeView(store: ruleStore)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("ChildGuard")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -59,291 +76,133 @@ struct ContentView: View {
     }
 }
 
+/// 初回起動時のみ表示。親用 / 子用のいずれかを選ばせ、以降はその役割のみ使用する。
+private struct RoleSelectionView: View {
+    var onSelect: (AppMode) -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 32) {
+                Text("この端末をどちらとして使いますか？")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                VStack(spacing: 16) {
+                    Button {
+                        onSelect(.parent)
+                    } label: {
+                        Label("親用として使う", systemImage: "person.2.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        onSelect(.child)
+                    } label: {
+                        Label("子用として使う", systemImage: "person.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.horizontal, 40)
+
+                Text("一度選ぶと変更できません。別の役割で使う場合はアプリを削除して再インストールしてください。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+
+                Spacer()
+            }
+            .padding(.top, 48)
+            .navigationTitle("ChildGuard")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
 struct ParentModeView: View {
     @ObservedObject var store: RuleStore
-    @State private var isParentDevice: Bool = false
     @State private var inputMinutes: String = ""
-    @State private var shareItem: IdentifiableURL?
-    @State private var isPreparingShare = false
-    @State private var parentNotifyBaseURL: String = ""
-    @State private var displayedFamilyId: String?
-    @State private var parentRegisterMessage: String?
-    @State private var isRegisteringParent = false
-    @State private var showQRScanner = false
-    @State private var showQRDisplay = false
-    @State private var showFamilyCodeQR = false
-    @State private var showFCMURLDetails = false
     @State private var scrollContentId = 0
-    @State private var shareErrorMessage: String?
-    /// CloudKit が使えないとき用：ルールを childguard:// の QR で表示
     @State private var showRuleQRSheet = false
 
     var body: some View {
         ScrollView {
-        VStack(spacing: 20) {
-            Image(systemName: "person.2.fill")
-                .font(.largeTitle)
+            VStack(spacing: 20) {
+                Image(systemName: "person.2.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+
+                Text("1日の利用時間の上限")
+                    .font(.headline)
+
+                Button("表示がおかしいときはタップ") {
+                    scrollContentId += 1
+                }
+                .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("1日の利用時間の上限")
-                .font(.headline)
+                HStack {
+                    TextField("分", text: $inputMinutes)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                    Text("分 / 日")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal)
 
-            Button("表示がおかしいときはタップ") {
-                scrollContentId += 1
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+                Button("保存") {
+                    if let m = Int(inputMinutes), m >= 0 {
+                        store.rule = Rule(dailyLimitMinutes: m)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
 
-            if isParentDevice {
-                // 親用端末: 編集・保存・共有・FCM 設定
-                parentDeviceContent
-            } else {
-                // 子の端末など: 表示のみ ＋ この端末を親用として登録するボタン
-                nonParentDeviceContent
+                if store.rule.dailyLimitMinutes > 0 {
+                    Text("現在の設定: 1日 \(store.rule.dailyLimitMinutes) 分まで")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if store.rule.dailyLimitMinutes > 0 {
+                    Group {
+                        Text("ルールを子に渡す")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            showRuleQRSheet = true
+                        } label: {
+                            Label("ルールをQRで表示", systemImage: "qrcode")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Text("子の端末でこのQRを読み取ると、ルールが反映されます。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .sheet(isPresented: $showRuleQRSheet) {
+                        RuleQRSheet(minutes: store.rule.dailyLimitMinutes)
+                    }
+                }
             }
-        }
-        .padding(.bottom, 24)
+            .padding(.bottom, 24)
         }
         .id(scrollContentId)
         .padding()
         .onAppear {
-            isParentDevice = UserDefaults.standard.bool(forKey: AppGroup.isParentDeviceKey)
             if store.rule.dailyLimitMinutes > 0 {
                 inputMinutes = "\(store.rule.dailyLimitMinutes)"
             }
-            let saved = AppGroup.shared
-            parentNotifyBaseURL = saved?.string(forKey: AppGroup.parentNotifyBaseURLKey) ?? AppGroup.defaultFCMBaseURL
-            displayedFamilyId = saved?.string(forKey: AppGroup.familyIdKey)
-        }
-        .sheet(isPresented: $showQRScanner, onDismiss: {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { scrollContentId += 1 }
-        }) {
-            QRCodeScannerView(scannedURL: $parentNotifyBaseURL)
-        }
-        .sheet(isPresented: $showQRDisplay, onDismiss: {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { scrollContentId += 1 }
-        }) {
-            QRCodeDisplayView(urlString: parentNotifyBaseURL)
-        }
-        .sheet(isPresented: $showFamilyCodeQR, onDismiss: {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { scrollContentId += 1 }
-        }) {
-            FamilyCodeQRSheetView(familyCode: displayedFamilyId ?? "")
-        }
-        .sheet(item: $shareItem) { identifiable in
-            ShareSheet(url: identifiable.url) { shareItem = nil }
-        }
-    }
-
-    /// 親用端末として登録済みのときの UI（編集・保存・共有・FCM）
-    @ViewBuilder
-    private var parentDeviceContent: some View {
-        HStack {
-            TextField("分", text: $inputMinutes)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 100)
-            Text("分 / 日")
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal)
-
-        Button("保存") {
-            if let m = Int(inputMinutes), m >= 0 {
-                store.rule = Rule(dailyLimitMinutes: m)
-            }
-        }
-        .buttonStyle(.borderedProminent)
-
-        if store.rule.dailyLimitMinutes > 0 {
-            Text("現在の設定: 1日 \(store.rule.dailyLimitMinutes) 分まで")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-
-        if store.rule.dailyLimitMinutes > 0 {
-            Group {
-                Text("ルールを子に渡す")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button {
-                    showRuleQRSheet = true
-                } label: {
-                    Label("ルールをQRで表示", systemImage: "qrcode")
-                }
-                .buttonStyle(.borderedProminent)
-                Text("子の端末でこのQRを読み取ると、ルールが反映されます。確実に渡せます。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button {
-                    shareErrorMessage = nil
-                    isPreparingShare = true
-                    store.prepareShareURL { url, errorMessage in
-                        isPreparingShare = false
-                        if let url = url {
-                            shareItem = IdentifiableURL(url: url)
-                        } else {
-                            shareErrorMessage = errorMessage.map { _ in "共有リンクを用意できませんでした。上の「ルールをQRで表示」を使って子に渡してください。" } ?? "上の「ルールをQRで表示」を使って子に渡してください。"
-                            showRuleQRSheet = true
-                        }
-                    }
-                } label: {
-                    if isPreparingShare {
-                        ProgressView()
-                    } else {
-                        Label("子どもと共有（CloudKit リンク）", systemImage: "square.and.arrow.up")
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(isPreparingShare)
-                if let msg = shareErrorMessage {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .sheet(isPresented: $showRuleQRSheet) {
-                RuleQRSheet(minutes: store.rule.dailyLimitMinutes)
-            }
-        }
-
-        Divider()
-            .padding(.vertical, 8)
-
-        Text("親への通知（FCM）")
-            .font(.headline)
-        Text("上の「ルールをQRで表示」がルール用。ここは制限がかかったときの通知先の識別用です。この端末を「親」として登録すると、子の制限到達時にプッシュが届きます。家族コードを子の端末で入力するかQRで読み取らせてください。")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-
-        if let code = displayedFamilyId {
-            Text("家族コード: \(code)")
-                .font(.title3.monospacedDigit())
-            Button("QRで表示（子がスキャン）") {
-                showFamilyCodeQR = true
-            }
-            .buttonStyle(.bordered)
-            Button("トークンを再登録") {
-                registerParent()
-            }
-            .buttonStyle(.bordered)
-            .disabled(isRegisteringParent)
-        } else {
-            Button("親としてこの端末を登録") {
-                registerParent()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isRegisteringParent)
-        }
-        if isRegisteringParent {
-            ProgressView()
-        }
-        if let msg = parentRegisterMessage {
-            Text(msg)
-                .font(.caption)
-                .foregroundStyle(msg.hasPrefix("登録しました") ? Color.secondary : Color.red)
-                .multilineTextAlignment(.center)
-        }
-
-        DisclosureGroup("URL（詳細）") {
-            Text(effectiveFCMBaseURL)
-                .font(.caption2)
-                .textSelection(.enabled)
-            TextField("上書きする場合のみ入力", text: $parentNotifyBaseURL)
-                .textFieldStyle(.roundedBorder)
-                .keyboardType(.URL)
-                .autocapitalization(.none)
-                .font(.caption)
-        }
-        .padding(.top, 4)
-    }
-
-    private var effectiveFCMBaseURL: String {
-        let s = parentNotifyBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        return s.isEmpty ? AppGroup.defaultFCMBaseURL : s
-    }
-
-    /// 親用端末未登録のときの UI（表示のみ ＋ この端末を親用として登録する）
-    @ViewBuilder
-    private var nonParentDeviceContent: some View {
-        if store.rule.dailyLimitMinutes > 0 {
-            Text("現在の設定: 1日 \(store.rule.dailyLimitMinutes) 分まで")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 8)
-        } else {
-            Text("いまルールは設定されていません。\n親用の端末で「1日の上限」を設定し、子どもと共有してください。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 8)
-        }
-
-        Text("設定の変更は、親用として登録した端末でのみ行えます。")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal)
-
-        Button {
-            registerAsParentDevice()
-        } label: {
-            if isRegisteringParent {
-                ProgressView()
-            } else {
-                Label("この端末を親用として登録する", systemImage: "person.badge.plus")
-            }
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(isRegisteringParent)
-        .padding(.top, 8)
-        if let msg = parentRegisterMessage {
-            Text(msg)
-                .font(.caption)
-                .foregroundStyle(msg.hasPrefix("登録しました") ? Color.secondary : Color.red)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-        }
-    }
-
-    /// この端末を「親用」として登録し、FCMで家族コードを取得する
-    private func registerAsParentDevice() {
-        UserDefaults.standard.set(true, forKey: AppGroup.isParentDeviceKey)
-        isParentDevice = true
-        registerParent()
-    }
-
-    private func registerParent() {
-        parentRegisterMessage = nil
-        isRegisteringParent = true
-        let baseURL = effectiveFCMBaseURL
-        let existingId = displayedFamilyId
-        Task {
-            let result = await ParentNotificationService.registerAsParent(baseURL: baseURL, existingFamilyId: existingId)
-            await MainActor.run {
-                isRegisteringParent = false
-                switch result {
-                case .success(let familyId):
-                    displayedFamilyId = familyId
-                    parentRegisterMessage = "登録しました。家族コード: \(familyId)。子の端末でこのコードを入力するか、QRで読み取ってください。"
-                case .failure(let error):
-                    parentRegisterMessage = error.message
-                }
-            }
         }
     }
 }
 
-private struct IdentifiableURL: Identifiable {
-    let id = UUID()
-    let url: URL
-}
-
-/// CloudKit を使わず、ルールを childguard://rule?minutes=... の QR で渡す用
+/// ルールを childguard://rule?minutes=... の QR で渡す用
 private struct RuleQRSheet: View {
     let minutes: Int
     @Environment(\.dismiss) private var dismiss
@@ -396,71 +255,15 @@ private struct RuleQRSheet: View {
     }
 }
 
-private struct ShareSheet: View {
-    let url: URL
-    var onDismiss: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Text("子どもの端末でこのQRを読み取ると、ルールが共有されます。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                if let image = qrImage {
-                    Image(uiImage: image)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 260, maxHeight: 260)
-                }
-                ShareLink(
-                    item: url,
-                    subject: Text("ChildGuard のルール"),
-                    message: Text("ルールを共有します")
-                )
-                Spacer()
-            }
-            .navigationTitle("子どもと共有")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("閉じる") {
-                        onDismiss()
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-
-    private var qrImage: UIImage? {
-        let s = url.absoluteString
-        guard !s.isEmpty, let data = s.data(using: .utf8) else { return nil }
-        let context = CIContext()
-        let filter = CIFilter.qrCodeGenerator()
-        filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("H", forKey: "inputCorrectionLevel")
-        guard let output = filter.outputImage else { return nil }
-        let scaled = output.transformed(by: .init(scaleX: 8, y: 8))
-        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
-    }
-}
-
 struct ChildModeView: View {
     @ObservedObject var store: RuleStore
     @State private var authStatus: AuthorizationStatus = .notDetermined
     @State private var isRequestingAuth = false
     @State private var authErrorMessage: String?
     @State private var monitoringMessage: String?
-    @State private var familyCodeInput: String = ""
-    @State private var familyCodeSavedMessage: String?
-    @State private var showFamilyCodeQRScanner = false
-    /// シート閉じ後などにスクロールがおかしくなるのを防ぐため、ID で再描画する
     @State private var scrollContentId = 0
+    @State private var showRuleQRScanner = false
+    @State private var scannedRuleURL: String = ""
 
     var body: some View {
         ScrollView {
@@ -507,20 +310,36 @@ struct ChildModeView: View {
         .id(scrollContentId)
         .onAppear {
             authStatus = AuthorizationCenter.shared.authorizationStatus
-            familyCodeInput = AppGroup.shared?.string(forKey: AppGroup.familyIdKey) ?? ""
         }
         .alert("認可エラー", isPresented: Binding(get: { authErrorMessage != nil }, set: { if !$0 { authErrorMessage = nil } })) {
             Button("OK", role: .cancel) { authErrorMessage = nil }
         } message: {
             if let msg = authErrorMessage { Text(msg) }
         }
-        .sheet(isPresented: $showFamilyCodeQRScanner, onDismiss: {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                scrollContentId += 1
-            }
+        .sheet(isPresented: $showRuleQRScanner, onDismiss: {
+            applyRuleFromScannedURLIfNeeded()
         }) {
-            QRCodeScannerView(scannedURL: $familyCodeInput, acceptAnyString: true)
+            QRCodeScannerView(
+                scannedURL: $scannedRuleURL,
+                acceptAnyString: true,
+                prompt: "親のiPhoneで表示したルールのQRを読み取ってください"
+            )
         }
+        .onChange(of: scannedRuleURL) { _, _ in
+            applyRuleFromScannedURLIfNeeded()
+        }
+    }
+
+    /// スキャンした文字列が childguard://rule?minutes=X ならルールを反映する
+    private func applyRuleFromScannedURLIfNeeded() {
+        guard let url = URL(string: scannedRuleURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme == "childguard",
+              url.host == "rule",
+              let comp = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let minutes = comp.queryItems?.first(where: { $0.name == "minutes" })?.value.flatMap(Int.init),
+              minutes > 0 else { return }
+        store.applyRuleFromQR(dailyLimitMinutes: minutes)
+        scannedRuleURL = ""
     }
 
     @ViewBuilder
@@ -530,60 +349,24 @@ struct ChildModeView: View {
                 .font(.body)
                 .padding()
         } else {
-            Text("いまルールは設定されていません。\n親モードで「1日の上限」を設定してください。")
+            Text("いまルールは設定されていません。\n親のiPhoneで「ルールをQRで表示」したQRを読み取るか、下のボタンから読み取ってください。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding()
         }
 
+        Button {
+            showRuleQRScanner = true
+        } label: {
+            Label("親からルールをもらう（QRを読み取る）", systemImage: "qrcode.viewfinder")
+        }
+        .buttonStyle(.borderedProminent)
+        .padding(.bottom, 8)
+
         // アプリ選択を確実に表示（高さを確保してスクロールで届くようにする）
         FamilyActivityPickerView()
             .frame(minHeight: 240)
-
-        Text("家族コード（8桁）")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        Text("親の端末で表示されている8桁のコードを入力するか、QRで読み取ると、制限がかかったときにその親にプッシュが届きます。")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-        HStack {
-            TextField("12345678", text: $familyCodeInput)
-                .textFieldStyle(.roundedBorder)
-                .keyboardType(.numberPad)
-                .font(.body.monospacedDigit())
-            Button("QRで読み取る") {
-                showFamilyCodeQRScanner = true
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(.horizontal)
-        HStack {
-            Button("保存") {
-                let raw = familyCodeInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                let digits = raw.filter(\.isNumber)
-                if digits.count == 8 {
-                    AppGroup.shared?.set(digits, forKey: AppGroup.familyIdKey)
-                    if AppGroup.shared?.string(forKey: AppGroup.parentNotifyBaseURLKey) == nil {
-                        AppGroup.shared?.set(AppGroup.defaultFCMBaseURL, forKey: AppGroup.parentNotifyBaseURLKey)
-                    }
-                    familyCodeSavedMessage = "保存しました"
-                } else if raw.isEmpty {
-                    AppGroup.shared?.removeObject(forKey: AppGroup.familyIdKey)
-                    familyCodeSavedMessage = "家族コードを削除しました"
-                } else {
-                    familyCodeSavedMessage = "8桁の数字を入力してください"
-                }
-            }
-            .buttonStyle(.bordered)
-        }
-        .padding(.horizontal)
-        if let msg = familyCodeSavedMessage {
-            Text(msg)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
 
         Button("監視を開始") {
             Task {

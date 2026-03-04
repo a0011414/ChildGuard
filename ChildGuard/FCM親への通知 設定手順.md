@@ -4,6 +4,15 @@
 
 ---
 
+## 課金・Blaze プランについて（担当・AI が忘れがちな前提のメモ）
+
+- **FCM（プッシュ送信）自体は無料**ですが、**Cloud Functions** で「子が制限に達したら親に FCM を送る」処理を動かす場合、**Blaze（従量課金）プラン**が必要になることがあります（Functions が外部にリクエストを送るためなど）。**このプロジェクトでは Blaze にしている。**
+- **課金をやめたい場合の選択肢**  
+  - **親への通知をやめる**: Firebase をやめて CloudKit のみにする（または通知機能をアプリから外す）→ 必要なら Blaze を解約し Spark（無料）に戻す。  
+  - **通知を CloudKit でやる**: 親へのプッシュを CloudKit のサブスクリプションで実装し直すと、Firebase が不要になり課金も発生しません（実装の手間はかかります）。
+
+---
+
 ## 次にやること（チェックリスト）
 
 - [x] **1** Firebase プロジェクト作成 → Firestore 有効化 → iOS アプリ追加 → GoogleService-Info.plist ダウンロード＆Xcode に追加（**済**: `GoogleService-Info.plist` あり・プロジェクト `childguard-72f89`）
