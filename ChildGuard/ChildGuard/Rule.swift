@@ -20,10 +20,16 @@ struct Rule: Codable, Equatable {
 private let key = "childguard_rule"
 
 private enum CloudKitConfig {
+    /// 共有はカスタムゾーンでのみ対応。既定ゾーンでは CKShare が使えない。
     static let zoneName = "ChildGuardRules"
     static let recordType = "Rule"
     static let recordName = "currentRule"
     static let keyMinutes = "dailyLimitMinutes"
+    /// entitlements の iCloud コンテナ ID と一致させる
+    static let containerIdentifier = "iCloud.com.yoshi.ChildGuard"
+    static var customZoneID: CKRecordZone.ID {
+        CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
+    }
 }
 
 /// Preview 実行中かどうか（CloudKit をスキップしてクラッシュを防ぐ）
@@ -31,27 +37,26 @@ private var isRunningInPreview: Bool {
     ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
 }
 
-/// iCloud が利用可能なときだけ true（CKContainer.default() を呼ばずに判定）
-private var canUseCloudKit: Bool {
-    !isRunningInPreview && FileManager.default.ubiquityIdentityToken != nil
-}
-
 final class RuleStore: ObservableObject {
     @Published var rule: Rule {
         didSet { save() }
     }
 
-    /// iCloud 利用可能なときだけ作成。それ以外では nil のまま（UserDefaults のみ使用）
+    /// entitlements で指定したコンテナを明示的に使用。Preview 時は nil。
     private lazy var container: CKContainer? = {
-        guard canUseCloudKit else { return nil }
-        return CKContainer.default()
+        guard !isRunningInPreview else { return nil }
+        return CKContainer(identifier: CloudKitConfig.containerIdentifier)
     }()
-    private var zoneID: CKRecordZone.ID?
 
     init() {
         self.rule = RuleStore.loadFromUserDefaults()
         if !isRunningInPreview {
-            fetchFromCloudKit()
+            fetchFromSharedCloudKit { [weak self] didFindShared in
+                guard let self = self else { return }
+                if !didFindShared {
+                    self.fetchFromCloudKit()
+                }
+            }
         }
     }
 
@@ -84,10 +89,9 @@ final class RuleStore: ObservableObject {
         let db = container.privateCloudDatabase
         ensureZoneExists(in: db) { [weak self] zoneID in
             guard let self = self, let zoneID = zoneID else { return }
-            self.zoneID = zoneID
             let recordID = CKRecord.ID(recordName: CloudKitConfig.recordName, zoneID: zoneID)
-            db.fetch(withRecordID: recordID) { record, error in
-                guard let record = record,
+            db.fetch(withRecordID: recordID) { [weak self] record, error in
+                guard let self = self, let record = record,
                       let minutes = record[CloudKitConfig.keyMinutes] as? Int else { return }
                 DispatchQueue.main.async {
                     self.rule = Rule(dailyLimitMinutes: minutes)
@@ -102,7 +106,6 @@ final class RuleStore: ObservableObject {
         let db = container.privateCloudDatabase
         ensureZoneExists(in: db) { [weak self] zoneID in
             guard let self = self, let zoneID = zoneID else { return }
-            self.zoneID = zoneID
             let recordID = CKRecord.ID(recordName: CloudKitConfig.recordName, zoneID: zoneID)
             let record = CKRecord(recordType: CloudKitConfig.recordType, recordID: recordID)
             record[CloudKitConfig.keyMinutes] = self.rule.dailyLimitMinutes
@@ -110,47 +113,153 @@ final class RuleStore: ObservableObject {
         }
     }
 
+    /// 共有可能なカスタムゾーンを作成する。既に存在する場合はエラーになるが、その場合も zoneID を返して後続の fetch/save に進む。
     private func ensureZoneExists(in db: CKDatabase, completion: @escaping (CKRecordZone.ID?) -> Void) {
-        let zoneID = CKRecordZone.ID(zoneName: CloudKitConfig.zoneName, ownerName: CKCurrentUserDefaultName)
+        let zoneID = CloudKitConfig.customZoneID
         let zone = CKRecordZone(zoneID: zoneID)
         db.save(zone) { _, error in
-            // 成功時は zoneID を返す。失敗時も「既に存在」の可能性があるため zoneID を返し、後続の fetch/save に任せる。
-            completion(zoneID)
+            // 成功 or 既存ゾーンで競合 → いずれも zoneID を返す
+            DispatchQueue.main.async { completion(zoneID) }
         }
+    }
+
+    // MARK: - 共有 DB からルールを読む（親が共有し子が Safari 等で承諾した場合）
+
+    /// 他者から共有されたゾーンにルールがあればそれを採用する。親の iPhone で共有→子が Safari で承諾したあと、子のアプリを開くとここで取得できる。共有がなければ completion(false) で private を読む。
+    private func fetchFromSharedCloudKit(completion: @escaping (Bool) -> Void) {
+        guard let container = container else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
+        let db = container.sharedCloudDatabase
+        let query = CKQuery(recordType: CloudKitConfig.recordType, predicate: NSPredicate(value: true))
+        let op = CKQueryOperation(query: query)
+        op.qualityOfService = .userInitiated
+        var didFindShared = false
+        op.recordFetchedBlock = { [weak self] record in
+            guard let self = self,
+                  let minutes = record[CloudKitConfig.keyMinutes] as? Int else { return }
+            didFindShared = true
+            DispatchQueue.main.async {
+                self.rule = Rule(dailyLimitMinutes: minutes)
+                self.saveToUserDefaults()
+            }
+        }
+        op.queryCompletionBlock = { _, error in
+            DispatchQueue.main.async {
+                completion(didFindShared)
+            }
+        }
+        db.add(op)
     }
 
     // MARK: - 親→子共有（CKShare）
 
-    /// ルールを子どもと共有するための URL を用意する。完了時に main で callback が呼ばれる。Preview では何もしない。
-    func prepareShareURL(completion: @escaping (URL?) -> Void) {
+    /// ルールを子どもと共有するための URL を用意する。カスタムゾーンでレコードを用意してから CKShare を作成する。
+    func prepareShareURL(completion: @escaping (URL?, _ errorMessage: String?) -> Void) {
         if isRunningInPreview {
-            DispatchQueue.main.async { completion(nil) }
+            DispatchQueue.main.async { completion(nil, nil) }
             return
         }
         guard let container = container else {
-            DispatchQueue.main.async { completion(nil) }
+            DispatchQueue.main.async { completion(nil, "iCloud が利用できません。設定で iCloud にサインインし、このアプリで iCloud が有効か確認してください。") }
             return
         }
         let db = container.privateCloudDatabase
-        let zoneID = CKRecordZone.ID(zoneName: CloudKitConfig.zoneName, ownerName: CKCurrentUserDefaultName)
-        let recordID = CKRecord.ID(recordName: CloudKitConfig.recordName, zoneID: zoneID)
-        db.fetch(withRecordID: recordID) { [weak self] record, error in
-            guard let self = self, let record = record else {
-                DispatchQueue.main.async { completion(nil) }
+        ensureZoneExists(in: db) { [weak self] zoneID in
+            guard let self = self, let zoneID = zoneID else {
+                DispatchQueue.main.async { completion(nil, "共有用のゾーンを準備できませんでした。") }
                 return
             }
-            record[CloudKitConfig.keyMinutes] = self.rule.dailyLimitMinutes
-            let share = CKShare(rootRecord: record)
-            share[CKShare.SystemFieldKey.title] = "ChildGuard のルール"
-            share.publicPermission = .none
-            let op = CKModifyRecordsOperation(recordsToSave: [record, share], recordIDsToDelete: nil)
-            op.modifyRecordsResultBlock = { result in
-                let url: URL?
-                if case .success = result { url = share.url } else { url = nil }
-                DispatchQueue.main.async { completion(url) }
-            }
-            db.add(op)
+            let recordID = CKRecord.ID(recordName: CloudKitConfig.recordName, zoneID: zoneID)
+            self.fetchRecordAndCreateShare(db: db, recordID: recordID, zoneID: zoneID, retryCount: 0, completion: completion)
         }
+    }
+
+    /// レコード取得→共有作成。エラー15（サーバー拒否）のときは1回だけリトライする。
+    private func fetchRecordAndCreateShare(db: CKDatabase, recordID: CKRecord.ID, zoneID: CKRecordZone.ID, retryCount: Int, completion: @escaping (URL?, String?) -> Void) {
+        db.fetch(withRecordID: recordID) { [weak self] record, error in
+            guard let self = self else { return }
+            if let ckError = error as? CKError, ckError.code == .unknownItem {
+                // レコードが存在しないだけなら新規作成して続行
+            } else if let error = error as? CKError, error.code.rawValue == 15 {
+                // エラー15 = サーバーがリクエストを拒否（一時障害のことが多い）
+                if retryCount < 1 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                        self?.fetchRecordAndCreateShare(db: db, recordID: recordID, zoneID: zoneID, retryCount: retryCount + 1, completion: completion)
+                    }
+                    return
+                }
+                let msg = "CloudKit のサーバーで一時的なエラーが発生しました（エラー15）。\n代わりに「ルールをQRで表示」を使うと、CloudKit なしでルールを子に渡せます。"
+                DispatchQueue.main.async { completion(nil, msg) }
+                return
+            } else if let error = error {
+                let msg = "読み込みエラー: \(error.localizedDescription)\n代わりに「ルールをQRで表示」を使うと、CloudKit なしでルールを子に渡せます。"
+                DispatchQueue.main.async { completion(nil, msg) }
+                return
+            }
+            let recordToShare: CKRecord
+            if let record = record {
+                recordToShare = record
+                record[CloudKitConfig.keyMinutes] = self.rule.dailyLimitMinutes
+            } else {
+                recordToShare = CKRecord(recordType: CloudKitConfig.recordType, recordID: recordID)
+                recordToShare[CloudKitConfig.keyMinutes] = self.rule.dailyLimitMinutes
+            }
+            // 必ず「レコードを先に1回保存」→「共有だけ別オペで保存」にする（レコードとShareを同時送信するとエラー15になりやすいため）
+            self.saveRecordThenCreateShare(db: db, record: recordToShare, retryCount: retryCount, recordID: recordID, zoneID: zoneID, completion: completion)
+        }
+    }
+
+    /// レコードを保存してから、共有だけを別オペレーションで保存する。
+    private func saveRecordThenCreateShare(db: CKDatabase, record: CKRecord, retryCount: Int, recordID: CKRecord.ID, zoneID: CKRecordZone.ID, completion: @escaping (URL?, String?) -> Void) {
+        db.save(record) { [weak self] _, saveError in
+            guard let self = self else { return }
+            if let saveError = saveError as? CKError, saveError.code.rawValue == 15, retryCount < 1 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    self?.fetchRecordAndCreateShare(db: db, recordID: recordID, zoneID: zoneID, retryCount: retryCount + 1, completion: completion)
+                }
+                return
+            }
+            if let saveError = saveError {
+                let msg = (saveError.localizedDescription) + "\n代わりに「ルールをQRで表示」を使うと、CloudKit なしでルールを子に渡せます。"
+                DispatchQueue.main.async { completion(nil, msg) }
+                return
+            }
+            self.createShareOnly(db: db, record: record, completion: completion)
+        }
+    }
+
+    /// レコードと CKShare を 1 回の modify で保存する（公式サンプルでよく使われる形）。
+    private func createShareOnly(db: CKDatabase, record: CKRecord, completion: @escaping (URL?, String?) -> Void) {
+        let share = CKShare(rootRecord: record)
+        share[CKShare.SystemFieldKey.title] = "ChildGuard のルール"
+        share.publicPermission = .none
+        let op = CKModifyRecordsOperation(recordsToSave: [record, share], recordIDsToDelete: nil)
+        op.modifyRecordsResultBlock = { result in
+            switch result {
+            case .success:
+                DispatchQueue.main.async { completion(share.url, nil) }
+            case .failure(let error):
+                let ckError = error as? CKError
+                let msg: String
+                if ckError?.code.rawValue == 15 {
+                    msg = "CloudKit のサーバーで一時的なエラーが発生しました（エラー15）。\n代わりに「ルールをQRで表示」を使うと、CloudKit なしでルールを子に渡せます。"
+                } else {
+                    msg = (error.localizedDescription.isEmpty ? "共有の作成に失敗しました。" : error.localizedDescription) + "\n代わりに「ルールをQRで表示」を使うと、CloudKit なしでルールを子に渡せます。"
+                }
+                DispatchQueue.main.async { completion(nil, msg) }
+            }
+        }
+        db.add(op)
+    }
+
+    /// QR で渡されたルール（childguard://rule?minutes=...）を反映する。CloudKit を使わない代替用。
+    func applyRuleFromQR(dailyLimitMinutes: Int) {
+        guard dailyLimitMinutes > 0 else { return }
+        rule = Rule(dailyLimitMinutes: dailyLimitMinutes)
+        saveToUserDefaults()
+        if !isRunningInPreview { saveToCloudKit() }
     }
 
     /// 共有 URL を受け取ってルールを反映する（子側で呼ぶ）。

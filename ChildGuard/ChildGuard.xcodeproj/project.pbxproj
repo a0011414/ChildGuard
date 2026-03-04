@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		1D2ABE432F53C60B003A4842 /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D2ABE422F53C60B003A4842 /* DeviceActivity.framework */; };
 		1D2ABE4B2F53C60B003A4842 /* ChildGuardDeviceActivityMonitorExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1D2ABE402F53C60B003A4842 /* ChildGuardDeviceActivityMonitorExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1DB602AD2F541000002FF9E8 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1DB602AC2F541000002FF9E8 /* FirebaseCore */; };
+		1DB602AF2F54100D002FF9E8 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 1DB602AE2F54100D002FF9E8 /* FirebaseMessaging */; };
+		1DB602B02F54101E002FF9E8 /* ChildGuard/GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 1DB602B12F54101E002FF9E8 /* ChildGuard/GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +42,7 @@
 		1D2ABE402F53C60B003A4842 /* ChildGuardDeviceActivityMonitorExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ChildGuardDeviceActivityMonitorExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1D2ABE422F53C60B003A4842 /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
 		1D7AEACC2F50467600AA4080 /* ChildGuard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChildGuard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1DB602B12F54101E002FF9E8 /* ChildGuard/GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "ChildGuard/GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -80,6 +84,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1DB602AF2F54100D002FF9E8 /* FirebaseMessaging in Frameworks */,
+				1DB602AD2F541000002FF9E8 /* FirebaseCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +106,7 @@
 				1D7AEACE2F50467600AA4080 /* ChildGuard */,
 				1D2ABE442F53C60B003A4842 /* ChildGuardDeviceActivityMonitorExtension */,
 				1D2ABE412F53C60B003A4842 /* Frameworks */,
+				1DB602B12F54101E002FF9E8 /* ChildGuard/GoogleService-Info.plist */,
 				1D7AEACD2F50467600AA4080 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -157,6 +164,8 @@
 			);
 			name = ChildGuard;
 			packageProductDependencies = (
+				1DB602AC2F541000002FF9E8 /* FirebaseCore */,
+				1DB602AE2F54100D002FF9E8 /* FirebaseMessaging */,
 			);
 			productName = ChildGuard;
 			productReference = 1D7AEACC2F50467600AA4080 /* ChildGuard.app */;
@@ -189,6 +198,9 @@
 			);
 			mainGroup = 1D7AEAC32F50467600AA4080;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1DB602AB2F540ECC002FF9E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1D7AEACD2F50467600AA4080 /* Products */;
 			projectDirPath = "";
@@ -212,6 +224,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1DB602B02F54101E002FF9E8 /* ChildGuard/GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,6 +260,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ChildGuardDeviceActivityMonitorExtension/ChildGuardDeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F5558YDHK6;
@@ -262,6 +276,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yoshi.ChildGuard.ChildGuardDeviceActivityMonitorExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -276,6 +291,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ChildGuardDeviceActivityMonitorExtension/ChildGuardDeviceActivityMonitorExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F5558YDHK6;
@@ -291,6 +307,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yoshi.ChildGuard.ChildGuardDeviceActivityMonitorExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -433,6 +450,7 @@
 				DEVELOPMENT_TEAM = F5558YDHK6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "親への通知用の URL を QR コードで読み取るためにカメラを使用します。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -460,12 +478,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = ChildGuard/ChildGuard.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ChildGuard/ChildGuardRelease.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F5558YDHK6;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "親への通知用の URL を QR コードで読み取るためにカメラを使用します。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -519,6 +538,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1DB602AB2F540ECC002FF9E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1DB602AC2F541000002FF9E8 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1DB602AB2F540ECC002FF9E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		1DB602AE2F54100D002FF9E8 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1DB602AB2F540ECC002FF9E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1D7AEAC42F50467600AA4080 /* Project object */;
 }

@@ -8,7 +8,6 @@
 import DeviceActivity
 import FamilyControls
 import Foundation
-import ManagedSettings
 
 extension DeviceActivityName {
     static let dailyLimit = DeviceActivityName("dailyLimit")
@@ -50,11 +49,8 @@ enum DeviceActivityMonitoring {
         let center = DeviceActivityCenter()
         do {
             try center.startMonitoring(.dailyLimit, during: schedule, events: [.limitReached: event])
-            // 本体で一度 Store を触っておく（Extension 側のシールド適用が効きやすくなる場合がある）
-            let store = ManagedSettingsStore()
-            store.shield.applications = nil
-            store.shield.applicationCategories = nil
-            store.shield.webDomains = nil
+            // シールドは Extension の eventDidReachThreshold でだけ設定する。ここでクリアすると、
+            // 制限中に「監視を開始」を再度押したときに制限が外れてしまうため行わない。
             return nil // 成功
         } catch {
             return "監視の開始に失敗しました: \(error.localizedDescription)"

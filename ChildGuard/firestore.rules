@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 親の FCM トークン保存用。本番では認証をかけることを推奨。
+    match /config/{doc} {
+      allow read, write: if true;
+    }
+    // 家族IDごとの親トークン。Cloud Functions の Admin SDK からのみ読み書き（クライアントは触らない）
+    match /families/{familyId} {
+      allow read, write: if false;
+    }
+  }
+}
